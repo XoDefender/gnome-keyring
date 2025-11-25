@@ -189,6 +189,82 @@ create_credential (GckSession *session, GckObject *object,
 }
 
 static gboolean
+gkd_login_prompt_for_unlock (void)
+{
+	CK_FUNCTION_LIST_PTR funcs;
+	GckSession *session;
+	GckObject *login;
+	CK_OBJECT_CLASS klass = CKO_G_CREDENTIAL;
+	CK_OBJECT_HANDLE obj_handle;
+	CK_ATTRIBUTE template[3];
+	GkmWrapPrompt *prompt;
+	gboolean success = FALSE;
+
+	session = lookup_login_session (NULL);
+	if (!session)
+		return FALSE;
+
+	login = lookup_login_keyring (session);
+	if (!login) {
+		g_object_unref (session);
+		return FALSE;
+	}
+
+	obj_handle = gck_object_get_handle (login);
+	template[0].type = CKA_CLASS;
+	template[0].pValue = &klass;
+	template[0].ulValueLen = sizeof (klass);
+	template[1].type = CKA_G_OBJECT;
+	template[1].pValue = &obj_handle;
+	template[1].ulValueLen = sizeof (obj_handle);
+	template[2].type = CKA_VALUE;
+	template[2].pValue = NULL;
+	template[2].ulValueLen = 0;
+
+	funcs = gkd_pkcs11_get_base_functions ();
+	g_return_val_if_fail (funcs != NULL, FALSE);
+
+	prompt = gkm_wrap_prompt_for_credential (funcs,
+	                                         gck_session_get_handle (session),
+	                                         template,
+	                                         G_N_ELEMENTS (template));
+
+	if (prompt) {
+		CK_ATTRIBUTE_PTR result_template = NULL;
+		CK_ULONG n_result = 0;
+
+		while (gkm_wrap_prompt_do_credential (prompt, &result_template, &n_result)) {
+			CK_OBJECT_HANDLE cred_handle;
+			CK_RV rv;
+
+			/* Try to create credential with entered password */
+			rv = (funcs->C_CreateObject) (gck_session_get_handle (session),
+			                              result_template, n_result,
+			                              &cred_handle);
+
+			if (rv == CKR_OK) {
+				/* Success - notify prompt and mark success */
+				gkm_wrap_prompt_done_credential (prompt, rv);
+				success = TRUE;
+				break;
+			} else if (rv != CKR_PIN_INCORRECT) {
+				/* Some other error, stop trying */
+				g_warning ("couldn't create login credential: %s",
+				           gkm_log_rv (rv));
+				break;
+			}
+			/* Wrong password entered, prompt again */
+		}
+		g_object_unref (prompt);
+	}
+
+	g_object_unref (login);
+	g_object_unref (session);
+
+	return success;
+}
+
+static gboolean
 unlock_or_create_login (GList *modules, const gchar *master)
 {
 	GError *error = NULL;
@@ -206,15 +282,22 @@ unlock_or_create_login (GList *modules, const gchar *master)
 	cred = create_credential (session, login, master, &error);
 
 	/* Failure, bad password? */
-	if (cred == NULL) {
+	if (cred == NULL) 
+	{
 		if (login && g_error_matches (error, GCK_ERROR, CKR_PIN_INCORRECT))
+		{
 			gkm_wrap_layer_mark_login_unlock_failure (master);
+			if(gkd_login_prompt_for_unlock())
+				gkm_wrap_layer_mark_login_unlock_success ();
+		}
 		else
 			g_warning ("couldn't create login credential: %s", egg_error_message (error));
 		g_clear_error (&error);
 
 	/* Non login keyring, create it */
-	} else if (!login) {
+	} 
+	else if (!login) 
+	{
 		login = create_login_keyring (session, cred, &error);
 		if (login == NULL && error) {
 			g_warning ("couldn't create login keyring: %s", egg_error_message (error));
@@ -222,7 +305,8 @@ unlock_or_create_login (GList *modules, const gchar *master)
 		}
 
 	/* The unlock succeeded yay */
-	} else {
+	} 
+	else {
 		gkm_wrap_layer_mark_login_unlock_success ();
 	}
 
