@@ -29,6 +29,7 @@
 
 #include "pkcs11/pkcs11i.h"
 #include "pkcs11/wrap-layer/gkm-wrap-layer.h"
+#include "pkcs11/wrap-layer/gkm-wrap-prompt.h"
 
 #include <gck/gck.h>
 #include <gcr/gcr-unlock-options.h>
