@@ -18,14 +18,11 @@ override_dh_auto_configure:
 		--without-libcap-ng \
 		--enable-docs \
 		--enable-ssh-agent \
-		$(SYSTEMD)
+		--without-systemd
 
 override_dh_install:
 	find debian/tmp -name '*.la' -print -delete
 	dh_install
-ifeq ($(DEB_HOST_ARCH_OS),linux)
-	dh_install -pgnome-keyring usr/lib/systemd/user
-endif
 
 override_dh_auto_test:
 	env -u LD_PRELOAD dbus-run-session -- dh_auto_test
