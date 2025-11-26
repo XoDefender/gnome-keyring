@@ -3,3 +3,7 @@ build
 autom*
 *.deps
 debian
+*.la
+test*
+*.lo
+*.o
